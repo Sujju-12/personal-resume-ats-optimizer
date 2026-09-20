@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.services.parser import parse_resume
@@ -22,8 +22,12 @@ def health():
     return {"status": "ok", "local_only": True}
 
 @app.post("/parse-resume")
-async def parse(file):
-    return {"message": "Parser endpoint scaffolded. Add UploadFile validation in the next implementation step."}
+async def parse(file: UploadFile = File(...)):
+    try:
+        text = parse_resume(file.filename or "", await file.read())
+        return {"filename": file.filename, "text": text}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
