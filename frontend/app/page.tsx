@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Score = {
   score: number;
@@ -9,6 +9,13 @@ type Score = {
   related: string[];
   missing: string[];
   note: string;
+};
+
+type Version = {
+  id: number;
+  label: string;
+  text: string;
+  score: number | null;
 };
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -22,8 +29,19 @@ export default function Home() {
   const [suggestion, setSuggestion] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [future, setFuture] = useState<string[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const resumeRef = useRef<HTMLTextAreaElement>(null);
+
+  const bullets = useMemo(
+    () =>
+      resume
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length >= 30 && /^(?:[-•*▪◦]|\d+[.)])\s+/.test(line)),
+    [resume]
+  );
 
   async function scan(text = resume) {
     if (!text || !jd) return null;
@@ -59,10 +77,33 @@ export default function Home() {
       setResume(d.text);
       setScore(null);
       setPreviousScore(null);
+      setVersions([{ id: 1, label: "Uploaded resume", text: d.text, score: null }]);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function selectBullet(bullet: string) {
+    setSelected(bullet);
+    setSuggestion("");
+    const textarea = resumeRef.current;
+    if (!textarea) return;
+    const start = resume.indexOf(bullet);
+    if (start >= 0) {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + bullet.length);
+    }
+  }
+
+  function handleResumeSelect() {
+    const textarea = resumeRef.current;
+    if (!textarea) return;
+    const value = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd).trim();
+    if (value) {
+      setSelected(value);
+      setSuggestion("");
     }
   }
 
@@ -98,6 +139,7 @@ export default function Home() {
       return;
     }
 
+    const beforeScore = score?.score ?? null;
     setHistory((h) => [...h, resume]);
     setFuture([]);
     setResume(nextResume);
@@ -106,16 +148,28 @@ export default function Home() {
     setMessage("Fix applied. Recalculating ATS score...");
 
     const nextScore = await scan(nextResume);
-    if (nextScore && score) {
-      const delta = nextScore.score - score.score;
-      setPreviousScore(score.score);
-      setMessage(
-        delta > 0
-          ? `ATS score improved by +${delta} points.`
-          : delta < 0
-            ? `ATS score changed by ${delta} points. Review the new wording before keeping it.`
-            : "ATS score did not change. The wording was not counted as an ATS improvement."
-      );
+    setPreviousScore(beforeScore);
+
+    if (nextScore) {
+      setVersions((v) => [
+        ...v,
+        {
+          id: v.length + 1,
+          label: nextScore.score > (beforeScore ?? -1) ? "Improved AI fix" : "Applied AI fix",
+          text: nextResume,
+          score: nextScore.score,
+        },
+      ]);
+      if (beforeScore !== null) {
+        const delta = nextScore.score - beforeScore;
+        setMessage(
+          delta > 0
+            ? `ATS score improved by +${delta} points.`
+            : delta < 0
+              ? `ATS score changed by ${delta} points. Review the wording or undo it.`
+              : "ATS score did not change. This wording produced no measurable ATS improvement."
+        );
+      }
     }
   }
 
@@ -135,6 +189,15 @@ export default function Home() {
     setResume(next);
     setFuture((f) => f.slice(1));
     setMessage("Redo applied. Scan again to refresh the score.");
+  }
+
+  function restoreVersion(version: Version) {
+    setHistory((h) => [...h, resume]);
+    setFuture([]);
+    setResume(version.text);
+    setSelected("");
+    setSuggestion("");
+    setMessage(`Restored version ${version.id}: ${version.label}`);
   }
 
   return (
@@ -168,20 +231,40 @@ export default function Home() {
               <button onClick={redo} disabled={!future.length}>Redo</button>
             </div>
           </div>
-          <textarea className="resume" value={resume} onChange={(e) => { setResume(e.target.value); setScore(null); }} placeholder="Paste your resume text..." />
+          <p className="hint">Select text directly, or choose a detected bullet below.</p>
+          <textarea
+            ref={resumeRef}
+            className="resume"
+            value={resume}
+            onChange={(e) => { setResume(e.target.value); setScore(null); }}
+            onSelect={handleResumeSelect}
+            placeholder="Paste your resume text..."
+          />
+
+          {bullets.length > 0 && (
+            <div className="bullet-picker">
+              <label>DETECTED RESUME BULLETS</label>
+              {bullets.map((bullet, index) => (
+                <button className={selected === bullet ? "bullet active" : "bullet"} key={index} onClick={() => selectBullet(bullet)}>
+                  {bullet}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <aside className="panel">
           <label>ATS-STYLE SCORE</label>
           <div className="score">{score?.score ?? "—"}<span>/100</span></div>
+
           {score && (
             <>
               {previousScore !== null && (
-                <div className="delta">Previous: {previousScore} → Current: {score.score}</div>
+                <div className="delta">Previous: {previousScore} → Current: {score.score} ({score.score - previousScore >= 0 ? "+" : ""}{score.score - previousScore})</div>
               )}
               <div className="metrics">
                 {Object.entries(score.breakdown).map(([k, v]) => (
-                  <div key={k}><span>{k}</span><b>{String(v)}%</b></div>
+                  <div key={k}><span>{k.replace("_", " ")}</span><b>{String(v)}%</b></div>
                 ))}
               </div>
               <div className="chips">
@@ -193,17 +276,31 @@ export default function Home() {
           )}
 
           <label>AI COACH</label>
-          <textarea value={selected} onChange={(e) => setSelected(e.target.value)} placeholder="Paste one resume bullet..." />
+          <textarea value={selected} onChange={(e) => setSelected(e.target.value)} placeholder="Select or paste one resume bullet..." />
           <button className="primary" onClick={fix} disabled={!selected || !jd || busy}>
             {busy ? "Working..." : "Generate Fix"}
           </button>
 
           {suggestion && (
             <div className="suggestion">
-              <label>SUGGESTED FIX</label>
+              <label>BEFORE</label>
+              <p>{selected}</p>
+              <label>AI SUGGESTED AFTER</label>
               <p>{suggestion}</p>
-              <button className="primary" onClick={apply} disabled={busy}>Apply Fix</button>
+              <button className="primary" onClick={apply} disabled={busy}>Apply Fix</button>{" "}
               <button onClick={fix} disabled={busy}>Regenerate</button>
+            </div>
+          )}
+
+          {versions.length > 0 && (
+            <div className="versions">
+              <label>VERSION HISTORY</label>
+              {versions.slice().reverse().map((version) => (
+                <div className="version" key={version.id}>
+                  <span><b>v{version.id}</b> {version.label} {version.score !== null ? `• ${version.score}/100` : ""}</span>
+                  <button onClick={() => restoreVersion(version)}>Restore</button>
+                </div>
+              ))}
             </div>
           )}
 
