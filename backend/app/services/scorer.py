@@ -143,6 +143,50 @@ def analyze_resume(resume, jd):
         + title_alignment * 0.05
     )
 
+    optimization_plan = []
+    if required_missing:
+        optimization_plan.append({
+            "priority": "high",
+            "area": "required_skills",
+            "action": "Address required skills only where the resume contains truthful evidence.",
+            "items": required_missing[:8],
+        })
+    if preferred_missing:
+        optimization_plan.append({
+            "priority": "medium",
+            "area": "preferred_skills",
+            "action": "Consider adding preferred skills only when already supported by resume evidence.",
+            "items": preferred_missing[:8],
+        })
+    if achievements < 70:
+        optimization_plan.append({
+            "priority": "high",
+            "area": "achievements",
+            "action": "Strengthen bullets with measurable outcomes, scope, or impact that are already supported by the resume.",
+            "items": [],
+        })
+    if structure < 100:
+        optimization_plan.append({
+            "priority": "medium",
+            "area": "structure",
+            "action": "Add or normalize missing standard resume sections without changing factual content.",
+            "items": [name for name in SECTION_ALIASES if name not in present_sections],
+        })
+    if title_alignment < 100 and title_terms:
+        optimization_plan.append({
+            "priority": "medium",
+            "area": "title_alignment",
+            "action": "Use the target role terminology where it truthfully describes the candidate's existing role or experience.",
+            "items": title_terms,
+        })
+    if semantic < 45:
+        optimization_plan.append({
+            "priority": "medium",
+            "area": "semantic_alignment",
+            "action": "Rewrite relevant existing bullets using terminology already supported by the resume and JD.",
+            "items": [],
+        })
+
     return {
         "score": score,
         "breakdown": {
@@ -170,5 +214,6 @@ def analyze_resume(resume, jd):
         },
         "jd_required_years": jd_years,
         "resume_years_detected": resume_years,
+        "optimization_plan": optimization_plan,
         "note": "ATS-style simulation only; not an employer ATS score.",
     }
