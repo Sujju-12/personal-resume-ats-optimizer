@@ -9,6 +9,17 @@ type Score = {
   related: string[];
   missing: string[];
   note: string;
+  jd_intelligence?: {
+    required_skills: string[];
+    preferred_skills: string[];
+    general_skills: string[];
+    required_matched: string[];
+    required_missing: string[];
+    preferred_matched: string[];
+    preferred_missing: string[];
+    role_titles: string[];
+    responsibilities: string[];
+  };
 };
 
 type Version = {
@@ -272,6 +283,17 @@ export default function Home() {
                 {score.related.map((x) => <i className="related" key={x}>~ {x}</i>)}
                 {score.missing.map((x) => <i className="missing" key={x}>⚠ {x}</i>)}
               </div>
+              {score.jd_intelligence && (
+                <div className="jd-intel">
+                  <label>JOB INTELLIGENCE</label>
+                  {score.jd_intelligence.role_titles.length > 0 && <p><b>Role:</b> {score.jd_intelligence.role_titles.join(", ")}</p>}
+                  <div className="intel-grid">
+                    <div><b>Required</b><span>{score.jd_intelligence.required_matched.length} matched · {score.jd_intelligence.required_missing.length} missing</span></div>
+                    <div><b>Preferred</b><span>{score.jd_intelligence.preferred_matched.length} matched · {score.jd_intelligence.preferred_missing.length} missing</span></div>
+                  </div>
+                  {score.jd_intelligence.required_missing.length > 0 && <p className="intel-warning">Required gaps: {score.jd_intelligence.required_missing.join(", ")}</p>}
+                </div>
+              )}
             </>
           )}
 
