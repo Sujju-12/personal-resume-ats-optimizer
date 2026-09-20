@@ -30,6 +30,15 @@ SECTION_ALIASES = {
     "certifications":["certifications","certificates"],
 }
 
+REQUIRED_MARKERS = [
+    "required", "must have", "must-have", "you will need", "need to have",
+    "essential", "minimum qualifications", "basic qualifications"
+]
+PREFERRED_MARKERS = [
+    "preferred", "nice to have", "nice-to-have", "plus", "bonus", "desired",
+    "preferred qualifications"
+]
+
 def norm(s):
     return re.sub(r"\s+", " ", s.lower()).strip()
 
@@ -40,8 +49,48 @@ def extract_years(text):
     values = [float(x) for x in re.findall(r"(\d+(?:\.\d+)?)\+?\s*(?:years|yrs)", text.lower())]
     return max(values, default=0)
 
+def split_sentences(text):
+    return [s.strip(" •-\t") for s in re.split(r"(?<=[.!?])\s+|\n+", text) if len(s.strip()) >= 20]
+
+def section_context(sentence, jd):
+    lower = sentence.lower()
+    if any(marker in lower for marker in PREFERRED_MARKERS):
+        return "preferred"
+    if any(marker in lower for marker in REQUIRED_MARKERS):
+        return "required"
+    return "general"
+
+def classify_jd_skills(jd):
+    sentences = split_sentences(jd)
+    required, preferred, general = [], [], []
+    for name, aliases in SKILLS.items():
+        if not has(jd, aliases):
+            continue
+        contexts = [section_context(s, jd) for s in sentences if has(norm(s), aliases)]
+        if "required" in contexts:
+            required.append(name)
+        elif "preferred" in contexts:
+            preferred.append(name)
+        else:
+            general.append(name)
+    return required, preferred, general
+
+def extract_role_titles(jd):
+    terms = [
+        "devops engineer","site reliability engineer","sre","cloud engineer",
+        "platform engineer","software engineer","mlops engineer","agentops engineer",
+        "devsecops engineer","cloud support engineer"
+    ]
+    return [term for term in terms if term in jd]
+
+def extract_responsibilities(jd):
+    lines = [line.strip(" •-*\t") for line in jd.splitlines() if line.strip()]
+    verbs = re.compile(r"^(build|design|develop|deploy|manage|maintain|automate|monitor|implement|support|troubleshoot|create|lead|own|configure|integrate|optimize|improve|collaborate)\b", re.I)
+    return [line for line in lines if verbs.search(line)][:12]
+
 def analyze_resume(resume, jd):
     r, j = norm(resume), norm(jd)
+    required_skills, preferred_skills, general_skills = classify_jd_skills(jd)
 
     matched = [k for k,a in SKILLS.items() if has(r,a) and has(j,a)]
     missing = [k for k,a in SKILLS.items() if has(j,a) and not has(r,a)]
@@ -77,11 +126,13 @@ def analyze_resume(resume, jd):
     jd_years = float(jd_years_match.group(1)) if jd_years_match else 0
     experience = 100 if not jd_years else min(100, round((resume_years / jd_years) * 100)) if resume_years else 0
 
-    title_terms = []
-    for term in ["devops engineer","devops","site reliability engineer","sre","cloud engineer","platform engineer","software engineer"]:
-        if term in j:
-            title_terms.append(term)
+    title_terms = extract_role_titles(j)
     title_alignment = 100 if not title_terms else round(100 * sum(t in r for t in title_terms) / len(title_terms))
+
+    required_matched = [k for k in required_skills if has(r, SKILLS[k])]
+    required_missing = [k for k in required_skills if not has(r, SKILLS[k])]
+    preferred_matched = [k for k in preferred_skills if has(r, SKILLS[k])]
+    preferred_missing = [k for k in preferred_skills if not has(r, SKILLS[k])]
 
     score = round(
         keyword_score * 0.45
@@ -106,6 +157,17 @@ def analyze_resume(resume, jd):
         "related": related,
         "missing": missing,
         "sections_found": present_sections,
+        "jd_intelligence": {
+            "required_skills": required_skills,
+            "preferred_skills": preferred_skills,
+            "general_skills": general_skills,
+            "required_matched": required_matched,
+            "required_missing": required_missing,
+            "preferred_matched": preferred_matched,
+            "preferred_missing": preferred_missing,
+            "role_titles": title_terms,
+            "responsibilities": extract_responsibilities(jd),
+        },
         "jd_required_years": jd_years,
         "resume_years_detected": resume_years,
         "note": "ATS-style simulation only; not an employer ATS score.",
