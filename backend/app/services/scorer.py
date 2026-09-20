@@ -16,8 +16,11 @@ SKILLS = {
     "Fusion":["adobe fusion"], "Akamai":["akamai"]
 }
 
-def norm(s): return re.sub(r"\s+"," ",s.lower())
-def has(text, aliases): return any(x in text for x in aliases)
+def norm(s):
+    return re.sub(r"\\s+", " ", s.lower())
+
+def has(text, aliases):
+    return any(x in text for x in aliases)
 
 def analyze_resume(resume, jd):
     r, j = norm(resume), norm(jd)
@@ -35,6 +38,6 @@ def analyze_resume(resume, jd):
         semantic=0
     sections=sum(x in r for x in ["summary","experience","skills","education"])
     structure=round(sections/4*100)
-    metrics=min(100,len(re.findall(r"\b\d+%|\b\d+\+",resume))*20)
+    metrics=min(100,len(re.findall(r"\\b\\d+%|\\b\\d+\\+",resume))*20)
     score=round(keyword_score*.55+semantic*.25+structure*.10+metrics*.10)
     return {"score":score,"breakdown":{"keywords":keyword_score,"semantic":semantic,"structure":structure,"achievements":metrics},"matched":found,"related":related,"missing":missing,"note":"ATS-style simulation only; not an employer ATS score."}
