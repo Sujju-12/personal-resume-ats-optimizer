@@ -20,6 +20,7 @@ type Score = {
     role_titles: string[];
     responsibilities: string[];
   };
+  optimization_plan?: { priority: string; area: string; action: string; items: string[] }[];
 };
 
 type Version = {
@@ -54,7 +55,7 @@ export default function Home() {
     [resume]
   );
 
-  async function scan(text = resume) {
+  async function scan(text = resume, compareTo: number | null = null) {
     if (!text || !jd) return null;
     setBusy(true);
     setMessage("");
@@ -67,6 +68,7 @@ export default function Home() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || "Scan failed");
       setScore(d);
+      if (compareTo !== null) setPreviousScore(compareTo);
       return d as Score;
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Scan failed");
@@ -158,8 +160,7 @@ export default function Home() {
     setSuggestion("");
     setMessage("Fix applied. Recalculating ATS score...");
 
-    const nextScore = await scan(nextResume);
-    setPreviousScore(beforeScore);
+    const nextScore = await scan(nextResume, beforeScore);
 
     if (nextScore) {
       setVersions((v) => [
@@ -184,31 +185,67 @@ export default function Home() {
     }
   }
 
-  function undo() {
-    if (!history.length) return;
+  async function undo() {
+    if (!history.length || busy) return;
     const previous = history[history.length - 1];
+    const currentScore = score?.score ?? null;
     setFuture((f) => [resume, ...f]);
     setResume(previous);
     setHistory((h) => h.slice(0, -1));
-    setMessage("Undo applied. Scan again to refresh the score.");
+    setSelected("");
+    setSuggestion("");
+    setMessage("Undo applied. Recalculating ATS score...");
+    await scan(previous, currentScore);
   }
 
-  function redo() {
-    if (!future.length) return;
+  async function redo() {
+    if (!future.length || busy) return;
     const next = future[0];
+    const currentScore = score?.score ?? null;
     setHistory((h) => [...h, resume]);
     setResume(next);
     setFuture((f) => f.slice(1));
-    setMessage("Redo applied. Scan again to refresh the score.");
+    setSelected("");
+    setSuggestion("");
+    setMessage("Redo applied. Recalculating ATS score...");
+    await scan(next, currentScore);
   }
 
-  function restoreVersion(version: Version) {
+  async function restoreVersion(version: Version) {
+    if (busy) return;
+    const currentScore = score?.score ?? null;
     setHistory((h) => [...h, resume]);
     setFuture([]);
     setResume(version.text);
     setSelected("");
     setSuggestion("");
-    setMessage(`Restored version ${version.id}: ${version.label}`);
+    setMessage(`Restored version ${version.id}: ${version.label}. Recalculating...`);
+    await scan(version.text, currentScore);
+  }
+
+  function downloadResume() {
+    if (!resume) return;
+    const blob = new Blob([resume], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "optimized-resume.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetAll() {
+    if (busy) return;
+    setResume("");
+    setJd("");
+    setScore(null);
+    setPreviousScore(null);
+    setSelected("");
+    setSuggestion("");
+    setHistory([]);
+    setFuture([]);
+    setVersions([]);
+    setMessage("");
   }
 
   return (
@@ -228,9 +265,13 @@ export default function Home() {
       <section className="jd">
         <label>JOB DESCRIPTION</label>
         <textarea value={jd} onChange={(e) => { setJd(e.target.value); setScore(null); }} placeholder="Paste target job description..." />
-        <button className="primary" onClick={() => scan()} disabled={!resume || !jd || busy}>
+        <div className="actions">
+          <button className="primary" onClick={() => scan(resume, score?.score ?? null)} disabled={!resume || !jd || busy}>
           {busy ? "Working..." : "Scan Resume"}
-        </button>
+          </button>
+          <button onClick={downloadResume} disabled={!resume || busy}>Export TXT</button>
+          <button onClick={resetAll} disabled={busy}>Reset</button>
+        </div>
       </section>
 
       <section className="grid">
@@ -283,6 +324,18 @@ export default function Home() {
                 {score.related.map((x) => <i className="related" key={x}>~ {x}</i>)}
                 {score.missing.map((x) => <i className="missing" key={x}>⚠ {x}</i>)}
               </div>
+              {score.optimization_plan && score.optimization_plan.length > 0 && (
+                <div className="optimization-plan">
+                  <label>OPTIMIZATION PLAN</label>
+                  {score.optimization_plan.map((item, index) => (
+                    <div className="plan-item" key={index}>
+                      <div><b>{item.priority.toUpperCase()}</b> · {item.area.replace("_", " ")}</div>
+                      <p>{item.action}</p>
+                      {item.items.length > 0 && <span>{item.items.join(", ")}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {score.jd_intelligence && (
                 <div className="jd-intel">
                   <label>JOB INTELLIGENCE</label>
