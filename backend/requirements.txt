@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+PyMuPDF
+python-docx
+httpx
+scikit-learn
