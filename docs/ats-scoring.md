@@ -11,6 +11,17 @@ The score is a deterministic simulation designed for resume/JD comparison. It is
 - Experience alignment: 10%
 - Job-title alignment: 5%
 
+## JD intelligence
+
+The analyzer now separates detected JD skills into:
+- **Required** — skills found in sentences containing markers such as "required", "must have", or "minimum qualifications".
+- **Preferred** — skills found in sentences containing markers such as "preferred", "nice to have", "bonus", or "desired".
+- **General** — skills present in the JD without an explicit required/preferred marker.
+
+It also extracts likely role titles and up to 12 responsibility lines that begin with common action verbs.
+
+This classification is deterministic and intentionally conservative. A JD with poor formatting or ambiguous wording may leave a skill in **General** even when a human recruiter would classify it differently.
+
 ## What the engine measures
 
 1. **Keywords** — skills detected in both the JD and resume.
