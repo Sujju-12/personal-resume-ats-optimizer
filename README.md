@@ -4,6 +4,8 @@ Score your resume for **ATS (Applicant Tracking System)** parsers, compare it to
 
 Live repo: [github.com/Sujju-12/personal-resume-ats-optimizer](https://github.com/Sujju-12/personal-resume-ats-optimizer)
 
+This repository contains **only** the Personal Resume ATS Optimizer web app (Next.js under `src/` plus root config). It does not include cloud-agent metadata, `node_modules`, or other unrelated projects.
+
 ## Features
 
 - Live **ATS score** (contact, sections, formatting, verbs, metrics, length)
@@ -74,14 +76,13 @@ npm start
 
 Click **Load sample** on the home page to populate a demo resume and JD, then run **Tailor resume to this JD**.
 
-## Project structure
+## What's in this repo
 
-| Path | Purpose |
-|------|---------|
-| `src/components/resume-workspace.tsx` | Main UI |
-| `src/lib/ats-analyzer.ts` | ATS scoring rules |
-| `src/lib/jd-matcher.ts` | Keyword match vs JD |
-| `src/lib/resume-optimizer.ts` | JD-driven tailoring |
+| Area | Files |
+|------|--------|
+| App UI | `src/components/resume-workspace.tsx`, `src/components/score-ring.tsx` |
+| ATS logic | `src/lib/ats-analyzer.ts`, `jd-matcher.ts`, `resume-optimizer.ts`, `text-utils.ts` |
+| Next.js | `src/app/*`, `next.config.ts`, `package.json` |
 
 ## Tech stack
 
