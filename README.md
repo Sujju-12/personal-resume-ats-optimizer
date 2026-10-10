@@ -30,6 +30,37 @@ cd personal-resume-ats-optimizer
 npm install
 ```
 
+You must run `npm install` **inside the folder that contains `package.json`** (the repo root after clone). If you see `ENOENT ... package.json`, your folder is empty or not a full clone—use a fresh clone (steps below).
+
+### Troubleshooting `ENOENT package.json`
+
+On GitHub, `package.json` lives at the **root** of the repo (same level as `README.md` and `src/`). If it is missing locally:
+
+```bash
+cd /mnt/s/personal-resume-ats-optimizer
+ls -la package.json README.md src
+```
+
+If `package.json` is missing, re-clone into a new directory:
+
+```bash
+cd /mnt/s
+mv personal-resume-ats-optimizer personal-resume-ats-optimizer.old   # optional backup
+git clone https://github.com/Sujju-12/personal-resume-ats-optimizer.git
+cd personal-resume-ats-optimizer
+ls package.json
+npm install
+npm run dev
+```
+
+If the folder is already a git repo but outdated:
+
+```bash
+git remote -v
+git pull origin main
+ls package.json
+```
+
 ## Run the app
 
 ```bash
