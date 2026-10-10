@@ -1,0 +1,395 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import {
+  Sparkles,
+  Upload,
+  Copy,
+  Download,
+  FileText,
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { ScoreRing } from "@/components/score-ring";
+import { analyzeAts } from "@/lib/ats-analyzer";
+import { analyzeJdMatch } from "@/lib/jd-matcher";
+import {
+  optimizeResumeForJd,
+  SAMPLE_JD,
+  SAMPLE_RESUME,
+} from "@/lib/resume-optimizer";
+
+export function ResumeWorkspace() {
+  const [resume, setResume] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [optimized, setOptimized] = useState("");
+  const [lastChanges, setLastChanges] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const ats = useMemo(() => analyzeAts(resume), [resume]);
+  const atsOptimized = useMemo(
+    () => (optimized ? analyzeAts(optimized) : null),
+    [optimized],
+  );
+  const jdMatch = useMemo(
+    () => analyzeJdMatch(resume, jobDescription),
+    [resume, jobDescription],
+  );
+  const jdMatchOptimized = useMemo(
+    () =>
+      optimized && jobDescription
+        ? analyzeJdMatch(optimized, jobDescription)
+        : null,
+    [optimized, jobDescription],
+  );
+
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result ?? "");
+        setResume(result);
+        setOptimized("");
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    },
+    [],
+  );
+
+  const runOptimize = useCallback(() => {
+    const result = optimizeResumeForJd(resume, jobDescription);
+    setOptimized(result.optimized);
+    setLastChanges(result.changes);
+  }, [resume, jobDescription]);
+
+  const loadSamples = useCallback(() => {
+    setResume(SAMPLE_RESUME);
+    setJobDescription(SAMPLE_JD);
+    setOptimized("");
+    setLastChanges([]);
+  }, []);
+
+  const copyOptimized = useCallback(async () => {
+    if (!optimized) return;
+    await navigator.clipboard.writeText(optimized);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [optimized]);
+
+  const downloadOptimized = useCallback(() => {
+    if (!optimized) return;
+    const blob = new Blob([optimized], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "optimized-resume.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [optimized]);
+
+  const failedChecks = ats.checks.filter((c) => !c.passed);
+
+  return (
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <FileText className="h-5 w-5" />
+            </div>
+            <Badge variant="secondary" className="font-normal">
+              ATS + JD Tailoring
+            </Badge>
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Resume ATS Optimizer
+          </h1>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Score how parsers read your resume, compare it to any job
+            description, and generate a tailored version—side by side.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={loadSamples}>
+            Load sample
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setResume("");
+              setJobDescription("");
+              setOptimized("");
+              setLastChanges([]);
+            }}
+          >
+            <RotateCcw className="mr-1.5 h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+      </header>
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="flex flex-col items-center justify-center py-6">
+          <ScoreRing score={ats.score} label="ATS score" sublabel={ats.grade} />
+        </Card>
+        <Card className="flex flex-col items-center justify-center py-6">
+          <ScoreRing
+            score={jdMatch.matchScore}
+            label="JD match"
+            sublabel={
+              jobDescription.trim() ? "Keyword alignment" : "Paste a JD"
+            }
+          />
+        </Card>
+        <Card className="col-span-1 flex flex-col justify-center px-6 py-4 sm:col-span-2 lg:col-span-2">
+          <p className="text-sm font-medium">Quick read</p>
+          <p className="mt-1 text-sm text-muted-foreground">{ats.summary}</p>
+          {jobDescription.trim() && jdMatch.topGaps.length > 0 && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Top gaps:{" "}
+              <span className="text-foreground">
+                {jdMatch.topGaps.slice(0, 5).join(", ")}
+              </span>
+              {jdMatch.topGaps.length > 5 ? "…" : ""}
+            </p>
+          )}
+          {atsOptimized && jdMatchOptimized && (
+            <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
+              After optimize: ATS {atsOptimized.score} (+{atsOptimized.score - ats.score}), JD{" "}
+              {jdMatchOptimized.matchScore}% (+{jdMatchOptimized.matchScore - jdMatch.matchScore})
+            </p>
+          )}
+        </Card>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="flex flex-col border-primary/20 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-lg">Your resume</CardTitle>
+            <label
+              className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium hover:bg-muted"
+            >
+              <input
+                type="file"
+                accept=".txt,.md,.text"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <Upload className="h-4 w-4" />
+              Upload .txt
+            </label>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            <Textarea
+              placeholder="Paste your resume here (plain text works best for ATS)…"
+              className="min-h-[320px] resize-y font-mono text-sm leading-relaxed"
+              value={resume}
+              onChange={(e) => {
+                setResume(e.target.value);
+                setOptimized("");
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Tip: Use standard headings, bullets (-), and avoid tables or
+              graphics.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col border-amber-500/30 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Job description</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            <Textarea
+              placeholder="Paste the full job posting—requirements, skills, and responsibilities…"
+              className="min-h-[320px] resize-y text-sm leading-relaxed"
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+            />
+            <Button
+              className="w-full sm:w-auto"
+              onClick={runOptimize}
+              disabled={!resume.trim() || !jobDescription.trim()}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Tailor resume to this JD
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="optimized" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="optimized">Optimized</TabsTrigger>
+          <TabsTrigger value="ats">ATS checks</TabsTrigger>
+          <TabsTrigger value="keywords">Keywords</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="optimized" className="mt-4">
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-lg">Tailored output</CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!optimized}
+                  onClick={copyOptimized}
+                >
+                  <Copy className="mr-1.5 h-4 w-4" />
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!optimized}
+                  onClick={downloadOptimized}
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                  Before
+                </p>
+                <ScrollArea className="h-[280px] rounded-md border bg-muted/30 p-3">
+                  <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed">
+                    {resume || "—"}
+                  </pre>
+                </ScrollArea>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                  After
+                </p>
+                <ScrollArea className="h-[280px] rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                  <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed">
+                    {optimized ||
+                      "Run “Tailor resume to this JD” to see your optimized version here."}
+                  </pre>
+                </ScrollArea>
+              </div>
+              {lastChanges.length > 0 && (
+                <div className="lg:col-span-2">
+                  <Separator className="mb-4" />
+                  <p className="mb-2 text-sm font-medium">Changes made</p>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    {lastChanges.map((c, i) => (
+                      <li key={i} className="flex gap-2">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ats" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">ATS compatibility checklist</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {ats.checks.map((check) => (
+                  <li
+                    key={check.id}
+                    className="flex gap-3 rounded-lg border p-3 text-sm"
+                  >
+                    {check.passed ? (
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" />
+                    )}
+                    <div>
+                      <p className="font-medium">{check.label}</p>
+                      {!check.passed && (
+                        <p className="mt-0.5 text-muted-foreground">
+                          {check.tip}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {failedChecks.length > 0 && (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Fix {failedChecks.length} item
+                  {failedChecks.length > 1 ? "s" : ""} above, then re-scan by
+                  editing your resume.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="keywords" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Keyword map</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!jobDescription.trim() ? (
+                <p className="text-sm text-muted-foreground">
+                  Paste a job description to see matched and missing keywords.
+                </p>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      Matched ({jdMatch.matched.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {jdMatch.matched.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">None yet</span>
+                      ) : (
+                        jdMatch.matched.map((k) => (
+                          <Badge key={k} variant="secondary">{k}</Badge>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-rose-600 dark:text-rose-400">
+                      Missing ({jdMatch.missing.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {jdMatch.missing.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">
+                          Great coverage
+                        </span>
+                      ) : (
+                        jdMatch.missing.map((k) => (
+                          <Badge key={k} variant="outline">{k}</Badge>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
