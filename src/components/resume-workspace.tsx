@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import * as mammoth from "mammoth/mammoth.browser";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   Sparkles,
   Upload,
@@ -33,6 +35,7 @@ export function ResumeWorkspace() {
   const [optimized, setOptimized] = useState("");
   const [lastChanges, setLastChanges] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const ats = useMemo(() => analyzeAts(resume), [resume]);
   const atsOptimized = useMemo(
@@ -52,17 +55,47 @@ export function ResumeWorkspace() {
   );
 
   const handleFileUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result ?? "");
+
+      setUploadError("");
+      try {
+        let result = "";
+        const extension = file.name.split(".").pop()?.toLowerCase();
+
+        if (extension === "pdf") {
+          const data = new Uint8Array(await file.arrayBuffer());
+          const pdf = await getDocument({ data }).promise;
+          const pages = await Promise.all(
+            Array.from({ length: pdf.numPages }, async (_, index) => {
+              const page = await pdf.getPage(index + 1);
+              const content = await page.getTextContent();
+              return content.items
+                .map((item) => ("str" in item ? item.str : ""))
+                .join(" ");
+            }),
+          );
+          result = pages.join("\n\n");
+        } else if (extension === "docx") {
+          const extracted = await mammoth.extractRawText({
+            arrayBuffer: await file.arrayBuffer(),
+          });
+          result = extracted.value;
+        } else if (extension === "doc") {
+          throw new Error("Legacy .doc files are not supported. Save it as .docx or PDF and try again.");
+        } else {
+          result = await file.text();
+        }
+
+        if (!result.trim()) throw new Error("No readable text was found in this file.");
         setResume(result);
         setOptimized("");
-      };
-      reader.readAsText(file);
-      e.target.value = "";
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Could not read this file.");
+      } finally {
+        e.target.value = "";
+      }
     },
     [],
   );
@@ -183,12 +216,12 @@ export function ResumeWorkspace() {
             >
               <input
                 type="file"
-                accept=".txt,.md,.text"
+                accept=".txt,.md,.text,.pdf,.doc,.docx, text/plain, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="hidden"
                 onChange={handleFileUpload}
               />
               <Upload className="h-4 w-4" />
-              Upload .txt
+              Upload resume
             </label>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-3">
@@ -202,9 +235,13 @@ export function ResumeWorkspace() {
               }}
             />
             <p className="text-xs text-muted-foreground">
-              Tip: Use standard headings, bullets (-), and avoid tables or
-              graphics.
+              Supports PDF, DOCX, DOC, TXT, and Markdown files. PDF and DOCX text is extracted automatically.
             </p>
+            {uploadError && (
+              <p role="alert" className="text-xs text-destructive">
+                {uploadError}
+              </p>
+            )}
           </CardContent>
         </Card>
 
