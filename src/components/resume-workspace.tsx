@@ -2,7 +2,15 @@
 
 import { useCallback, useMemo, useState } from "react";
 import * as mammoth from "mammoth/mammoth.browser";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  getDocument,
+  GlobalWorkerOptions,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
+
+GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 import {
   Sparkles,
   Upload,
