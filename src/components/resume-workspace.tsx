@@ -130,12 +130,36 @@ export function ResumeWorkspace() {
 
   const downloadOptimized = useCallback(() => {
     if (!optimized) return;
-    const blob = new Blob([optimized], { type: "text/plain" });
+
+    const escapeHtml = (value: string) =>
+      value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const html = optimized
+      .split("\\n")
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return "<p>&nbsp;</p>";
+        if (/^[-•*]\s+/.test(trimmed)) {
+          return `<li>${escapeHtml(trimmed.replace(/^[-•*]\s+/, ""))}</li>`;
+        }
+        if (/^\d+\.\s+/.test(trimmed)) {
+          return `<li>${escapeHtml(trimmed.replace(/^\d+\.\s+/, ""))}</li>`;
+        }
+        if (/^(PROFESSIONAL SUMMARY|SUMMARY|EXPERIENCE|WORK HISTORY|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS)$/i.test(trimmed)) {
+          return `<h2>${escapeHtml(trimmed)}</h2>`;
+        }
+        return `<p>${escapeHtml(trimmed)}</p>`;
+      })
+      .join("")
+      .replace(/<li>/g, '<p style="margin-left:24px">• ')
+      .replace(/<\/li>/g, "</p>");
+
+    const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Tailored Resume</title><style>body{font-family:Arial,sans-serif;line-height:1.45;color:#111;max-width:760px;margin:40px auto;padding:0 24px}h2{font-size:14px;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:4px;margin:20px 0 8px}p{margin:5px 0}ul{margin:5px 0 10px;padding-left:24px}li{margin:4px 0}</style></head><body>${html}</body></html>`;
+    const blob = new Blob([documentHtml], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "optimized-resume.txt";
-    a.click();
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "tailored-resume.doc";
+    link.click();
     URL.revokeObjectURL(url);
   }, [optimized]);
 
@@ -215,22 +239,27 @@ export function ResumeWorkspace() {
         </Card>
       </section>
 
+      <section className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium">Start with your resume file</p>
+          <p className="text-sm text-muted-foreground">Upload a PDF, Word document, text file, or Markdown file to extract its content.</p>
+        </div>
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+          <input
+            type="file"
+            accept=".txt,.md,.text,.pdf,.doc,.docx, text/plain, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <Upload className="h-4 w-4" />
+          Upload resume
+        </label>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="flex flex-col border-primary/20 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-lg">Your resume</CardTitle>
-            <label
-              className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium hover:bg-muted"
-            >
-              <input
-                type="file"
-                accept=".txt,.md,.text,.pdf,.doc,.docx, text/plain, application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              <Upload className="h-4 w-4" />
-              Upload resume
-            </label>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-3">
             <Textarea
@@ -324,10 +353,33 @@ export function ResumeWorkspace() {
                   After
                 </p>
                 <ScrollArea className="h-[280px] rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-                  <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed">
-                    {optimized ||
-                      "Run “Tailor resume to this JD” to see your optimized version here."}
-                  </pre>
+                  {optimized ? (
+                    <div className="text-sm leading-relaxed">
+                      {optimized.split("\\n").map((line, index) => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return <div key={index} className="h-2" />;
+                        const bullet = trimmed.match(/^[-•*]\\s+(.+)/)?.[1] ?? trimmed.match(/^\\d+\\.\\s+(.+)/)?.[1];
+                        const heading = /^(PROFESSIONAL SUMMARY|SUMMARY|EXPERIENCE|WORK HISTORY|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS)$/i.test(trimmed);
+                        if (bullet) {
+                          return (
+                            <div key={index} className="flex gap-2 py-0.5">
+                              <span aria-hidden="true" className="shrink-0">•</span>
+                              <span>{bullet}</span>
+                            </div>
+                          );
+                        }
+                        return heading ? (
+                          <h3 key={index} className="mt-3 border-b border-emerald-600/30 pb-1 text-xs font-bold uppercase tracking-wider first:mt-0">{trimmed}</h3>
+                        ) : (
+                          <p key={index} className="py-0.5">{trimmed}</p>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Run “Tailor resume to this JD” to see your optimized version here.
+                    </p>
+                  )}
                 </ScrollArea>
               </div>
               {lastChanges.length > 0 && (
